@@ -12,7 +12,8 @@ The `variables.tf` file defines the customizable parts of the configuration to u
    - This makes the configuration more reusable. For example, you can change the `vm_size`, `location`, `admin_username`, or even the VM names by passing different values for the variables. These values can be changed in the `terraform.tfvars` file or when running the commands.
 
 2. **Provisioning the Web Server:**
-   - Using the `remote-exec` provisioner, Terraform will SSH into the web server after it’s created and run a series of commands to install and start Nginx. This effectively turns your Ubuntu VM into a web server.
+   - Create a public IP and attach it to the web server in order to allow us to access the server. This is necessary in this example due to using unroutable private IPs.
+   - Using the `remote-exec` provisioner, Terraform will SSH into the web server's public IP after it’s created and run a series of commands to install and start Nginx. This effectively turns your Ubuntu VM into a web server.
 
 3. **Customization:** 
    - By using variables, the configuration becomes highly customizable. For instance, if you wanted to deploy in a different region or change the VM size, you only need to adjust the variable values.
