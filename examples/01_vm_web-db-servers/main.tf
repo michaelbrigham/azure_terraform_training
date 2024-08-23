@@ -1,5 +1,6 @@
 provider "azurerm" {
   features {}
+  subscription_id = var.subscription_id
 }
 
 # Create a Resource Group
@@ -24,6 +25,15 @@ resource "azurerm_subnet" "example" {
   address_prefixes     = [var.subnet_prefix]
 }
 
+# Public IP for Web Server
+resource "azurerm_public_ip" "web_ip" {
+  name                = "web-public-ip"
+  location            = azurerm_resource_group.example.location
+  resource_group_name = azurerm_resource_group.example.name
+  allocation_method   = "Static"  # Standard SKU requires Static allocation
+  sku                 = "Standard"  # Basic sku is being retired
+}
+
 # Create Network Interface for Web Server
 resource "azurerm_network_interface" "web_nic" {
   name                = "web-nic"
@@ -34,6 +44,7 @@ resource "azurerm_network_interface" "web_nic" {
     name                          = "internal"
     subnet_id                     = azurerm_subnet.example.id
     private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.web_ip.id   # So we can access the server over the internet
   }
 }
 
@@ -69,8 +80,8 @@ resource "azurerm_linux_virtual_machine" "web_server" {
 
   source_image_reference {
     publisher = "Canonical"
-    offer     = "UbuntuServer"
-    sku       = "18.04-LTS"
+    offer     = "ubuntu-24_04-lts"
+    sku       = "server"
     version   = "latest"
   }
 
@@ -79,8 +90,8 @@ resource "azurerm_linux_virtual_machine" "web_server" {
     connection {
       type        = "ssh"
       user        = var.admin_username
-      private_key = file("~/.ssh/id_rsa")
-      host        = azurerm_network_interface.web_nic.private_ip_address
+      private_key = file("./id_rsa")
+      host        = azurerm_public_ip.web_ip.ip_address
     }
 
     inline = [
@@ -89,6 +100,11 @@ resource "azurerm_linux_virtual_machine" "web_server" {
       "sudo systemctl start nginx",
       "sudo systemctl enable nginx"
     ]
+  }
+
+  admin_ssh_key {
+    username   = var.admin_username
+    public_key = file("./id_rsa.pub")
   }
 }
 
@@ -111,13 +127,56 @@ resource "azurerm_linux_virtual_machine" "db_server" {
 
   source_image_reference {
     publisher = "MicrosoftSQLServer"
-    offer     = "SQL2019-Linux"
+    offer     = "sql2019-ubuntu2004"
     sku       = "Web"
     version   = "latest"
   }
 
   admin_ssh_key {
     username   = var.admin_username
-    public_key = file("~/.ssh/id_rsa.pub")
+    public_key = file("./id_rsa.pub")
   }
+}
+
+# NSG for Web Server
+resource "azurerm_network_security_group" "web_nsg" {
+  name                = "web-server-nsg"
+  location            = azurerm_resource_group.example.location
+  resource_group_name = azurerm_resource_group.example.name
+}
+
+# Rule to Allow HTTP Traffic
+resource "azurerm_network_security_rule" "allow_http" {
+  resource_group_name = azurerm_resource_group.example.name
+  name                        = "allow-http"
+  priority                    = 100
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "80"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  network_security_group_name = azurerm_network_security_group.web_nsg.name
+}
+
+# Rule to Allow SSH Traffic
+resource "azurerm_network_security_rule" "allow_ssh" {
+  resource_group_name = azurerm_resource_group.example.name
+  name                        = "allow-ssh"
+  priority                    = 110
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "22"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  network_security_group_name = azurerm_network_security_group.web_nsg.name
+}
+
+# Associate NSG with Web Server NIC
+resource "azurerm_network_interface_security_group_association" "web_nic_nsg" {
+  network_interface_id      = azurerm_network_interface.web_nic.id
+  network_security_group_id = azurerm_network_security_group.web_nsg.id
 }

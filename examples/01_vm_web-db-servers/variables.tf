@@ -1,3 +1,7 @@
+variable "subscription_id" {
+  description = "The Azure subscription ID"
+}
+
 variable "location" {
   description = "The Azure region where resources will be created"
   default     = "East US"
@@ -51,4 +55,9 @@ variable "web_vm_name" {
 variable "db_vm_name" {
   description = "The name of the database server VM"
   default     = "db-server"
+}
+
+variable "nsg_name" {
+  description = "The name of the Network Security Group"
+  default     = "web-server-nsg"
 }
